@@ -488,15 +488,15 @@ def main():
                 spread_val = fdata['次月']['latest'] - fdata['近月']['latest']
                 spread_pct = spread_val / fdata['近月']['latest'] * 100
                 if spread_val > 0:
-                    st.success(
-                        "**正價差 Contango** +" + f"{spread_val:.2f} (+{spread_pct:.2f}%)\n\n"
-                        "次月 > 近月，市場預期未來價格較高，屬正常儲存成本結構。"
-                        "若正價差快速擴大，可能暗示現貨需求偏弱。"
-                    )
+                    msg = "正價差 Contango  +" + f"{spread_val:.2f} (+{spread_pct:.2f}%)"
+                    msg2 = "次月 > 近月，市場預期未來價格較高。若正價差快速擴大，現貨需求可能偏弱。"
+                    st.success(msg + "\n\n" + msg2)
                 elif spread_val < 0:
-                    st.error(
-                        "**逆價差 Backwardation** " + f"{spread_val:.2f} ({spread_pct:.2f}%)\n\n"
-                        "近月 > 次月，現貨需求強烈！歷史上貴金屬出現逆價差常伴隨強勢行情。"
-                    )
+                    msg = "逆價差 Backwardation  " + f"{spread_val:.2f} ({spread_pct:.2f}%)"
+                    msg2 = "近月 > 次月，現貨需求強烈！歷史上貴金屬逆價差常伴隨強勢行情。"
+                    st.error(msg + "\n\n" + msg2)
                 else:
-                    st.info("價差接近零，市場結構中性
+                    st.info("價差接近零，市場結構中性。")
+
+            # 圖表
+            fig = plot_futu
