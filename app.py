@@ -451,7 +451,11 @@ def main():
     with col_title:
         st.markdown("# 🏅 金銀轉折信號系統")
     with col_time:
-        st.markdown(f"<div style='text-align:right;color:#4a5a6a;font-size:12px;padding-top:20px;font-family:monospace'>{datetime.now().strftime('%Y-%m-%d %H:%M')}</div>", unsafe_allow_html=True)
+        now_str = datetime.now().strftime('%Y-%m-%d %H:%M')
+        st.markdown(
+            f'<div style="text-align:right;color:#4a5a6a;font-size:12px;'
+            f'padding-top:20px;font-family:monospace">{now_str}</div>',
+            unsafe_allow_html=True)
 
     # 載入資料
     with st.spinner("載入市場資料中…"):
@@ -499,6 +503,4 @@ def main():
                             f"</div>", unsafe_allow_html=True)
             else:
                 st.markdown(f"<div style='padding:10px;background:#141420;border-radius:12px;border:1px solid #1a1a2e'>"
-                            f"<div style='color:#4a5a6a;font-size:13px'>{label}</div>"
-                            f"<div style='color:#4a5
-                            
+                            f"<div style='color:#4a5a6a;font-size:13px'>
