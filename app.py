@@ -23,6 +23,11 @@ div[data-testid="stMetricValue"] { font-family: monospace; font-size: 1.5rem; }
 
 SYMBOLS = {"🥇 黃金現貨": "GC=F", "🥈 白銀現貨": "SI=F"}
 
+FUTURES_MAP = {
+    "黃金": {"近月": "GC=F", "次月": "GCM25.CMX", "季月": "GCU25.CMX"},
+    "白銀": {"近月": "SI=F", "次月": "SIN25.CMX", "季月": "SIU25.CMX"},
+}
+
 @st.cache_data(ttl=900, show_spinner=False)
 def download(symbol):
     end = datetime.today()
@@ -88,6 +93,28 @@ def fetch_macro():
         except Exception:
             result[name] = {'value': None, 'chg': None}
     return result
+
+@st.cache_data(ttl=900, show_spinner=False)
+def fetch_futures_spread(metal):
+    """抓取期貨各月合約，計算期現價差與未平倉量"""
+    symbols = FUTURES_MAP.get(metal, {})
+    data = {}
+    for label, sym in symbols.items():
+        try:
+            hist = yf.download(sym, period='60d', progress=False, auto_adjust=True)
+            if isinstance(hist.columns, pd.MultiIndex):
+                hist.columns = hist.columns.get_level_values(0)
+            if len(hist) > 0:
+                # Volume 作為 OI 代理（Yahoo Finance OI 不穩定）
+                data[label] = {
+                    'close': hist['Close'],
+                    'volume': hist['Volume'],
+                    'latest': float(hist['Close'].iloc[-1]),
+                    'latest_vol': float(hist['Volume'].iloc[-1]),
+                }
+        except Exception:
+            pass
+    return data
 
 @st.cache_data(ttl=1200, show_spinner=False)
 def fetch_news():
@@ -224,6 +251,63 @@ def plot_ratio(g, s):
     )
     return fig
 
+def plot_futures_spread(futures_data, metal):
+    """繪製期現價差走勢與成交量"""
+    if not futures_data or '近月' not in futures_data:
+        return None
+
+    spot = futures_data['近月']['close'].tail(60)
+    fig = make_subplots(
+        rows=3, cols=1, shared_xaxes=True,
+        row_heights=[0.45, 0.30, 0.25],
+        vertical_spacing=0.04,
+        subplot_titles=["各月合約收盤價", "期現價差 (次月−近月)", "成交量（未平倉代理）"]
+    )
+
+    colors = {'近月': '#d4a843', '次月': '#58a6ff', '季月': '#a371f7'}
+    for label, d in futures_data.items():
+        c = colors.get(label, '#8899aa')
+        fig.add_trace(go.Scatter(
+            x=d['close'].tail(60).index,
+            y=d['close'].tail(60),
+            line=dict(color=c, width=1.5),
+            name=label), row=1, col=1)
+
+    # 價差
+    if '次月' in futures_data and '近月' in futures_data:
+        s1 = futures_data['近月']['close'].tail(60)
+        s2 = futures_data['次月']['close'].tail(60)
+        spread = (s2 - s1).dropna()
+        spread_colors = ['#00e5a0' if v >= 0 else '#ff4757' for v in spread]
+        fig.add_trace(go.Bar(
+            x=spread.index, y=spread,
+            marker_color=spread_colors, opacity=0.8,
+            name='次月−近月價差'), row=2, col=1)
+        fig.add_hline(y=0, line_color='#8899aa', line_dash='dash', opacity=0.5, row=2, col=1)
+
+    # 成交量
+    for label, d in futures_data.items():
+        c = colors.get(label, '#8899aa')
+        fig.add_trace(go.Bar(
+            x=d['volume'].tail(60).index,
+            y=d['volume'].tail(60),
+            name=label + ' 量',
+            marker_color=c, opacity=0.5), row=3, col=1)
+
+    color_metal = '#d4a843' if metal == '黃金' else '#a8b8c8'
+    fig.update_layout(
+        paper_bgcolor='#0a0a0f', plot_bgcolor='#0f0f18',
+        font=dict(color='#8899aa'),
+        xaxis=dict(gridcolor='#1a1a2e'),
+        yaxis=dict(gridcolor='#1a1a2e'),
+        margin=dict(l=10, r=10, t=50, b=10),
+        title=dict(text=metal + " 期現貨結構", font=dict(size=14, color='#c9d1d9')),
+        height=560, barmode='stack',
+        xaxis3=dict(rangeslider=dict(visible=False)),
+    )
+    return fig
+
+
 def main():
     st.markdown("# 🏅 金銀轉折信號系統")
     st.caption("資料: Yahoo Finance｜技術指標分析｜每 15 分鐘更新")
@@ -271,7 +355,7 @@ def main():
         ci += 1
 
     st.divider()
-    tabs = st.tabs(["📈 技術信號", "🌍 市場環境", "📰 財經新聞", "⚖️ 金銀比值"])
+    tabs = st.tabs(["📈 技術信號", "🌍 市場環境", "📰 財經新聞", "⚖️ 金銀比值", "📉 期現價差/OI"])
 
     with tabs[0]:
         for name, df in dfs.items():
@@ -376,8 +460,43 @@ def main():
             else:
                 st.info("比值正常範圍")
 
-    st.divider()
-    st.caption("⚠️ 本系統僅供個人輔助參考，不構成任何投資建議。")
+    with tabs[4]:
+        st.markdown("### 📉 期現貨價差 & 未平倉合約")
+        st.caption("價差 = 次月合約 − 近月合約｜正值=正價差(Contango)｜負值=逆價差(Backwardation)")
 
-if __name__ == "__main__":
-    main()
+        for metal in ["黃金", "白銀"]:
+            st.markdown("#### " + ("🥇 " if metal == "黃金" else "🥈 ") + metal)
+            with st.spinner(metal + " 期貨資料載入中…"):
+                fdata = fetch_futures_spread(metal)
+
+            if not fdata:
+                st.warning(metal + " 期貨資料暫時無法取得")
+                continue
+
+            # 摘要指標
+            mc = st.columns(3)
+            labels_order = ['近月', '次月', '季月']
+            for i, lbl in enumerate(labels_order):
+                if lbl in fdata:
+                    d = fdata[lbl]
+                    with mc[i]:
+                        st.metric(lbl + "合約", f"{d['latest']:.2f}",
+                                  delta=f"量: {int(d['latest_vol']):,}")
+
+            # 價差說明
+            if '近月' in fdata and '次月' in fdata:
+                spread_val = fdata['次月']['latest'] - fdata['近月']['latest']
+                spread_pct = spread_val / fdata['近月']['latest'] * 100
+                if spread_val > 0:
+                    st.success(
+                        "**正價差 Contango** +" + f"{spread_val:.2f} (+{spread_pct:.2f}%)\n\n"
+                        "次月 > 近月，市場預期未來價格較高，屬正常儲存成本結構。"
+                        "若正價差快速擴大，可能暗示現貨需求偏弱。"
+                    )
+                elif spread_val < 0:
+                    st.error(
+                        "**逆價差 Backwardation** " + f"{spread_val:.2f} ({spread_pct:.2f}%)\n\n"
+                        "近月 > 次月，現貨需求強烈！歷史上貴金屬出現逆價差常伴隨強勢行情。"
+                    )
+                else:
+                    st.info("價差接近零，市場結構中性
