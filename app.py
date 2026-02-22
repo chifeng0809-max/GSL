@@ -92,14 +92,23 @@ def fetch_macro():
 @st.cache_data(ttl=1200, show_spinner=False)
 def fetch_news():
     feeds = [
-        ("Reuters", "https://feeds.reuters.com/reuters/businessNews"),
+        ("Kitco", "https://www.kitco.com/rss/kitconews.rss"),
+        ("Mining.com", "https://www.mining.com/feed/"),
+        ("MarketWatch", "https://www.marketwatch.com/rss/marketpulse"),
         ("Yahoo Finance", "https://finance.yahoo.com/news/rssindex"),
     ]
     items = []
-    kw = ['gold', 'silver', 'metal', 'precious', 'Fed', 'inflation', '黃金', '白銀']
+    kw = ['gold', 'silver', 'metal', 'precious', 'Fed', 'inflation', 'rate',
+          'bullion', 'commodity', 'mint', 'spot', '黃金', '白銀']
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/rss+xml, application/xml, text/xml',
+    }
     for src, url in feeds:
         try:
-            r = requests.get(url, timeout=6, headers={'User-Agent': 'Mozilla/5.0'})
+            r = requests.get(url, timeout=8, headers=headers)
+            if r.status_code != 200:
+                continue
             root = ET.fromstring(r.content)
             for item in root.iter('item'):
                 title = item.findtext('title', '')
@@ -107,8 +116,10 @@ def fetch_news():
                 pub = item.findtext('pubDate', '')[:16] if item.findtext('pubDate') else ''
                 if any(k.lower() in title.lower() for k in kw):
                     items.append({'source': src, 'title': title, 'link': link, 'pub': pub})
+            if len(items) >= 10:
+                break
         except Exception:
-            pass
+            continue
     return items[:15]
 
 def get_signal_label(sig):
