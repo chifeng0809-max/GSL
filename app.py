@@ -62,13 +62,18 @@ def add_indicators(df):
     return df
 
 def add_signals(df):
-    bot = (df['RSI_14'] < 35) & (df['Stoch_K'] < 25) & (df['BB_Pct'] < 0.15)
-    top = (df['RSI_14'] > 65) & (df['Stoch_K'] > 75) & (df['BB_Pct'] > 0.85)
+    df = df.copy()
     df['Signal'] = 0
-    df.loc[bot, 'Signal'] = 1
-    df.loc[top, 'Signal'] = -1
-    df.loc[bot & (df['ZScore_20'] < -2), 'Signal'] = 2
-    df.loc[top & (df['ZScore_20'] > 2), 'Signal'] = -2
+    try:
+        bot = (df['RSI_14'] < 35) & (df['Stoch_K'] < 25) & (df['BB_Pct'] < 0.15)
+        top = (df['RSI_14'] > 65) & (df['Stoch_K'] > 75) & (df['BB_Pct'] > 0.85)
+        z = df['ZScore_20']
+        df.loc[bot, 'Signal'] = 1
+        df.loc[top, 'Signal'] = -1
+        df.loc[bot & (z < -2), 'Signal'] = 2
+        df.loc[top & (z > 2), 'Signal'] = -2
+    except Exception:
+        pass
     return df
 
 @st.cache_data(ttl=1800, show_spinner=False)
